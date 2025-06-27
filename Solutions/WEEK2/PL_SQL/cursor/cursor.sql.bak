@@ -1,0 +1,141 @@
+INSERT INTO Customers (CustomerID, Name, DOB, Balance, LastModified)
+VALUES (1, 'John Doe', TO_DATE('1980-05-10', 'YYYY-MM-DD'), 3000, SYSDATE);
+
+INSERT INTO Customers (CustomerID, Name, DOB, Balance, LastModified)
+VALUES (2, 'Jane Smith', TO_DATE('1992-07-15', 'YYYY-MM-DD'), 8000, SYSDATE);
+INSERT INTO Accounts (AccountID, CustomerID, AccountType, Balance, LastModified)
+VALUES (1, 1, 'Savings', 5000, SYSDATE);
+
+INSERT INTO Accounts (AccountID, CustomerID, AccountType, Balance, LastModified)
+VALUES (2, 2, 'Checking', 3000, SYSDATE);
+INSERT INTO Transactions (TransactionID, AccountID, TransactionDate, Amount, TransactionType)
+VALUES (1, 1, SYSDATE - 1, 1000, 'Deposit');
+
+INSERT INTO Transactions (TransactionID, AccountID, TransactionDate, Amount, TransactionType)
+VALUES (2, 2, SYSDATE - 2, 500, 'Withdrawal');
+INSERT INTO Loans (LoanID, CustomerID, LoanAmount, InterestRate, StartDate, EndDate)
+VALUES (1, 1, 7000, 6.5, SYSDATE, ADD_MONTHS(SYSDATE, 60));
+
+INSERT INTO Loans (LoanID, CustomerID, LoanAmount, InterestRate, StartDate, EndDate)
+VALUES (2, 2, 5000, 5.0, SYSDATE, ADD_MONTHS(SYSDATE, 48));
+-- SCENARIO 1: Generate Monthly Statements for All Customers
+
+DECLARE
+  CURSOR txn_cursor IS
+    SELECT c.CustomerID, c.Name, t.TransactionDate, t.Amount, t.TransactionType
+    FROM Customers c
+    JOIN Accounts a ON c.CustomerID = a.CustomerID
+    JOIN Transactions t ON a.AccountID = t.AccountID
+    WHERE EXTRACT(MONTH FROM t.TransactionDate) = EXTRACT(MONTH FROM SYSDATE)
+      AND EXTRACT(YEAR FROM t.TransactionDate) = EXTRACT(YEAR FROM SYSDATE)
+    ORDER BY c.CustomerID;
+
+  v_cust_id Customers.CustomerID%TYPE;
+  v_name Customers.Name%TYPE;
+  v_date Transactions.TransactionDate%TYPE;
+  v_amt Transactions.Amount%TYPE;
+  v_type Transactions.TransactionType%TYPE;
+
+BEGIN
+  DBMS_OUTPUT.PUT_LINE('=== Monthly Statements ===');
+
+  OPEN txn_cursor;
+  LOOP
+    FETCH txn_cursor INTO v_cust_id, v_name, v_date, v_amt, v_type;
+    EXIT WHEN txn_cursor%NOTFOUND;
+
+    DBMS_OUTPUT.PUT_LINE('Customer: ' || v_name || ' | Date: ' || TO_CHAR(v_date, 'YYYY-MM-DD') ||
+                         ' | Type: ' || v_type || ' | Amount: ' || v_amt);
+  END LOOP;
+  CLOSE txn_cursor;
+END;
+/
+SELECT 
+  c.CustomerID,
+  c.Name,
+  t.TransactionDate,
+  t.TransactionType,
+  t.Amount
+FROM Customers c
+JOIN Accounts a ON c.CustomerID = a.CustomerID
+JOIN Transactions t ON a.AccountID = t.AccountID
+WHERE EXTRACT(MONTH FROM t.TransactionDate) = EXTRACT(MONTH FROM SYSDATE)
+  AND EXTRACT(YEAR FROM t.TransactionDate) = EXTRACT(YEAR FROM SYSDATE);
+
+-- ---------------------------------------------------
+
+-- SCENARIO 2: Apply Annual Fee to All Accounts
+
+DECLARE
+  CURSOR account_cursor IS
+    SELECT AccountID, Balance FROM Accounts;
+
+  v_acc_id Accounts.AccountID%TYPE;
+  v_balance Accounts.Balance%TYPE;
+  annual_fee CONSTANT NUMBER := 100;
+
+BEGIN
+  DBMS_OUTPUT.PUT_LINE('=== Applying Annual Fee ===');
+
+  OPEN account_cursor;
+  LOOP
+    FETCH account_cursor INTO v_acc_id, v_balance;
+    EXIT WHEN account_cursor%NOTFOUND;
+
+    UPDATE Accounts
+    SET Balance = Balance - annual_fee
+    WHERE AccountID = v_acc_id;
+
+    DBMS_OUTPUT.PUT_LINE('Fee of ' || annual_fee || ' deducted from Account ID: ' || v_acc_id);
+  END LOOP;
+  CLOSE account_cursor;
+  COMMIT;
+END;
+/
+SELECT AccountID, CustomerID, AccountType, Balance FROM Accounts;
+
+-- ---------------------------------------------------
+
+-- SCENARIO 3: Update Interest Rates for All Loans
+
+DECLARE
+  CURSOR loan_cursor IS
+    SELECT LoanID, LoanAmount, InterestRate FROM Loans;
+
+  v_loan_id Loans.LoanID%TYPE;
+  v_loan_amt Loans.LoanAmount%TYPE;
+  v_rate Loans.InterestRate%TYPE;
+
+BEGIN
+  DBMS_OUTPUT.PUT_LINE('=== Updating Loan Interest Rates ===');
+
+  OPEN loan_cursor;
+  LOOP
+    FETCH loan_cursor INTO v_loan_id, v_loan_amt, v_rate;
+    EXIT WHEN loan_cursor%NOTFOUND;
+
+    IF v_loan_amt > 6000 THEN
+      UPDATE Loans
+      SET InterestRate = v_rate + 0.5
+      WHERE LoanID = v_loan_id;
+
+      DBMS_OUTPUT.PUT_LINE('Interest increased for Loan ID ' || v_loan_id);
+    ELSE
+      UPDATE Loans
+      SET InterestRate = v_rate - 0.5
+      WHERE LoanID = v_loan_id;
+
+      DBMS_OUTPUT.PUT_LINE('Interest decreased for Loan ID ' || v_loan_id);
+    END IF;
+  END LOOP;
+  CLOSE loan_cursor;
+  COMMIT;
+END;
+/
+SELECT 
+  LoanID,
+  CustomerID,
+  LoanAmount,
+  InterestRate
+FROM 
+  Loans;
