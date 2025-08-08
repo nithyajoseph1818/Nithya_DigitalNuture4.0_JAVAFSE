@@ -1,0 +1,2 @@
+"Welcome to GIT_HOL_1" 
+"This is my first Git hands-on for Week 8." 
